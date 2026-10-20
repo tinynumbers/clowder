@@ -117,6 +117,39 @@ export function planRuleAndDomainGroups(tabs, rules, minSize) {
   return { groups, leftovers };
 }
 
+export function formatRule({ pattern, name, color }) {
+  return `${pattern} = ${name}${color ? `, ${color}` : ""}`;
+}
+
+export const ruleKey = (pattern) => pattern.trim().toLowerCase();
+
+// Which of Claude's suggested rules are worth showing: ones that parse as a
+// rule, match at least one of the tabs Claude was shown, and aren't already a
+// rule, already pending, or previously dismissed. With groups (Claude's reply),
+// every matching tab must also be in the group the rule names, since a rule
+// that cut across Claude's own groups would undo its grouping from then on.
+export function filterSuggestions(suggestions, { rulesText, pending = [], dismissed = [], tabs = [], groups = null }) {
+  const skip = new Set([
+    ...parseRules(rulesText).map((r) => ruleKey(r.pattern)),
+    ...pending.map((s) => ruleKey(s.pattern)),
+    ...dismissed,
+  ]);
+  const fresh = [];
+  for (const s of suggestions || []) {
+    const [rule] = parseRules(formatRule(s));
+    if (!rule || rule.pattern !== s.pattern.trim() || skip.has(ruleKey(s.pattern))) continue;
+    const matching = tabs.filter((t) => matchRule([rule], t.url));
+    if (!matching.length) continue;
+    if (groups) {
+      const group = groups.find((g) => g.name.toLowerCase() === rule.name.toLowerCase());
+      if (!group || !matching.every((t) => group.tabIds.includes(t.id))) continue;
+    }
+    skip.add(ruleKey(s.pattern));
+    fresh.push({ pattern: rule.pattern, name: rule.name, color: rule.color });
+  }
+  return fresh;
+}
+
 // The existing group holding the most tabs from this site, or null. Lets a
 // new github.com tab join a "Work repos" group full of GitHub tabs, whatever
 // the group is called.

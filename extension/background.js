@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   colorFor,
   describeTab,
+  filterSuggestions,
   findDuplicatesToClose,
   groupForSite,
   labelForSite,
@@ -80,13 +81,30 @@ async function groupByRules(windowId) {
   return `Made or updated ${n} group${n === 1 ? "" : "s"}${windowsNote(tabs)}.`;
 }
 
+// Saves Claude's new rule suggestions for approval on the settings page and
+// returns how many were new. Kept in local storage: they're per browser.
+async function storeSuggestions(suggestions, tabs, groups, rulesText) {
+  const { ruleSuggestions = [], dismissedRules = [] } = await chrome.storage.local.get(["ruleSuggestions", "dismissedRules"]);
+  const fresh = filterSuggestions(suggestions, {
+    rulesText,
+    pending: ruleSuggestions,
+    dismissed: dismissedRules,
+    tabs,
+    groups,
+  });
+  if (fresh.length) await chrome.storage.local.set({ ruleSuggestions: [...ruleSuggestions, ...fresh] });
+  return fresh.length;
+}
+
+// Returns Claude's groups, plus how many new rule suggestions it stored.
 async function askClaude(payload) {
   const settings = await getSettings();
   await chrome.action.setBadgeText({ text: "…" });
   try {
     const reply = await chrome.runtime.sendNativeMessage(HOST, { ...payload, model: settings.model });
     if (!reply || !reply.ok) throw new Error(reply?.error || "No reply from the native host.");
-    return reply.groups;
+    const newRules = await storeSuggestions(reply.suggestedRules, payload.tabs, reply.groups, settings.rules);
+    return { groups: reply.groups, newRules };
   } catch (err) {
     if (/native messaging host not found|not allowed/i.test(err.message)) {
       throw new Error("Native host isn't installed. Run install.sh, then reload the extension.");
@@ -107,14 +125,15 @@ async function organizeWithClaude(windowId) {
   const allWindows = settings.manualScope === "all";
   const tabs = await groupableTabs(windowId, allWindows);
   if (tabs.length < 2) return "Not enough tabs to organize.";
-  const groups = await askClaude({
+  const { groups, newRules } = await askClaude({
     mode: "organize",
     tabs: tabs.map(describeTab),
     existingGroups: await existingGroupNames(windowId, allWindows),
     rules: settings.rules,
   });
   const n = await applyGroups(windowId, groups, allWindows);
-  return `Claude organized ${tabs.length} tabs${windowsNote(tabs)} into ${n} group${n === 1 ? "" : "s"}.`;
+  const suggested = newRules ? ` It also suggested ${newRules} new rule${newRules === 1 ? "" : "s"}: see Rules and settings.` : "";
+  return `Claude organized ${tabs.length} tabs${windowsNote(tabs)} into ${n} group${n === 1 ? "" : "s"}.${suggested}`;
 }
 
 async function ungroupAll(windowId) {
@@ -244,7 +263,7 @@ async function assignWithClaude(windowId) {
   const settings = await getSettings();
   const tabs = (await groupableTabs(windowId)).filter((t) => t.groupId === -1);
   if (!tabs.length) return;
-  const groups = await askClaude({
+  const { groups } = await askClaude({
     mode: "assign",
     tabs: tabs.map(describeTab),
     existingGroups: await existingGroupNames(windowId),

@@ -16,6 +16,17 @@ for (const button of buttons) {
   });
 }
 
+async function showSuggestionCount() {
+  const { ruleSuggestions = [] } = await chrome.storage.local.get("ruleSuggestions");
+  const n = ruleSuggestions.length;
+  document.getElementById("settingsLink").textContent =
+    "Rules and settings" + (n ? ` (${n} suggested rule${n === 1 ? "" : "s"})` : "");
+}
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.ruleSuggestions) showSuggestionCount();
+});
+showSuggestionCount();
+
 const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);
 for (const key of ["autoGroup", "useClaudeForUnmatched"]) {
   const box = document.getElementById(key);

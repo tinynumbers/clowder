@@ -12,10 +12,22 @@
     button { margin-top: 16px; padding: 7px 16px; font: inherit; }
     #saved { margin-left: 10px; color: #2e7d32; }
     code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; }
+    #suggestions { border: 1px solid #f0c6b3; background: #fdf4f0; border-radius: 8px; padding: 4px 14px 12px; margin: 16px 0; }
+    #suggestions h2 { font-size: 15px; margin: 10px 0 4px; }
+    .suggestion { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .suggestion code { flex: 1; overflow-wrap: anywhere; background: #fff; }
+    .suggestion button { margin: 0; padding: 4px 10px; }
   </style>
 </head>
 <body>
   <h1>Clowder</h1>
+
+  <section id="suggestions" hidden>
+    <h2>Suggested rules</h2>
+    <p class="hint">Claude suggested these while organizing your tabs. Adding one saves it to your rules right
+      away. Dismissed suggestions won't be suggested again.</p>
+    <div id="suggestionList"></div>
+  </section>
 
   <label for="rules">Rules</label>
   <p class="hint">One per line: <code>pattern = Group name, color</code>. The pattern is a substring of

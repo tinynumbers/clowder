@@ -23,6 +23,8 @@ they're on three different sites.
   more of them (the number is adjustable).
 - **Organize with Claude.** One click sends your tab titles and URLs to Claude,
   which sorts them into groups by topic or task, reusing groups you already have.
+- **Rules suggested by Claude.** While organizing, Claude proposes rules for
+  patterns it spots, and you add the ones you want with one click.
 - **Auto-group new tabs** as they load, with Claude as an optional fallback for
   tabs no rule catches.
 - **Close duplicate tabs** across all windows, keeping the copy you loaded most recently.
@@ -108,6 +110,21 @@ atlassian.net = Jira, cyan
 - The color is optional. Choose from grey, blue, red, yellow, green, pink,
   purple, cyan, or orange.
 - Claude sees your rules too, and follows them when it organizes.
+
+### Suggested rules
+
+Each time Claude organizes your tabs, it can also suggest up to three rules,
+so similar tabs get grouped the same way later without asking Claude. They
+appear under **Suggested rules** at the top of the settings page, and the
+popup's settings link shows how many are waiting. **Add** saves a rule right
+away. **Dismiss** removes it, and it won't be suggested again.
+
+Nothing is added without your OK, because a rule takes priority over
+everything else, including Claude's own grouping. For the same reason, a
+suggestion is only shown when every open tab it matches is in the group it
+names. If Claude grouped a Jira ticket with its pull request by task, it won't
+suggest a "Jira" rule that would pull every ticket into one group from then on.
+A local dev server, where every tab belongs together, is a typical suggestion.
 
 The settings page also lets you choose the Claude model (Haiku by default,
 which is fast and cheap) and how many tabs from one site it takes to make a
@@ -218,7 +235,7 @@ claude -p --model haiku --output-format json --json-schema <schema> \
   name. The helper also checks every reply and drops anything that doesn't
   refer to a tab it sent.
 - **What's stored:** your settings and rules live in Chrome's synced extension
-  storage. The helper writes a log to `~/Library/Logs/clowder.log` with
+  storage. Pending and dismissed rule suggestions stay in this browser only. The helper writes a log to `~/Library/Logs/clowder.log` with
   request sizes, timing, and cost, but no tab titles or URLs.
 - **Nothing is sent to Claude** unless you click "Organize with Claude", press
   its shortcut, or turn on "Ask Claude when no rule matches".
