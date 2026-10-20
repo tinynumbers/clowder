@@ -6,6 +6,7 @@ export const DEFAULT_SETTINGS = {
   autoGroup: true,
   useClaudeForUnmatched: false,
   joinGroupsAcrossWindows: false,
+  manualScope: "window",
   minDomainGroupSize: 2,
   model: "haiku",
   rules: "",

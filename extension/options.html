@@ -37,6 +37,14 @@ atlassian.net = Jira, cyan
   </select>
   <p class="hint">Claude only sees tab titles and URLs with query strings and fragments removed.</p>
 
+  <label for="manualScope">"Organize with Claude" and "Group by rules and domain" work on</label>
+  <select id="manualScope">
+    <option value="window">This window only</option>
+    <option value="all">All windows</option>
+  </select>
+  <p class="hint">All windows: tabs from every window are grouped together and moved into the window you
+    run it from. Tabs that don't end up in a group stay where they are. A window left with no tabs closes.</p>
+
   <label><input type="checkbox" id="autoGroup"> Auto-group new tabs</label>
   <label><input type="checkbox" id="useClaudeForUnmatched"> Ask Claude about new tabs that no rule or domain group catches</label>
   <label><input type="checkbox" id="joinGroupsAcrossWindows"> Move new tabs to a matching group in another window</label>

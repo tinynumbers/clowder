@@ -20,16 +20,27 @@ async function getSettings() {
   return { ...DEFAULT_SETTINGS, ...(await chrome.storage.sync.get(DEFAULT_SETTINGS)) };
 }
 
-async function groupableTabs(windowId) {
-  const tabs = await chrome.tabs.query({ windowId, pinned: false });
+// With allWindows, tabs from every normal window instead of just this one.
+async function groupableTabs(windowId, allWindows = false) {
+  const query = allWindows ? { windowType: "normal", pinned: false } : { windowId, pinned: false };
+  const tabs = await chrome.tabs.query(query);
   return tabs.filter((t) => t.url && !t.url.startsWith("chrome-extension://"));
 }
 
-// Puts each planned group's tabs into the window's existing group of the same
-// name, or a new group. Tabs that closed or moved windows meanwhile are skipped.
-async function applyGroups(windowId, groups) {
-  const live = new Set((await groupableTabs(windowId)).map((t) => t.id));
-  const existing = await chrome.tabGroups.query({ windowId });
+// Groups in this window, or with allWindows in every window, this window's first
+// so a same-named group here wins over one elsewhere.
+async function groupsInScope(windowId, allWindows = false) {
+  if (!allWindows) return chrome.tabGroups.query({ windowId });
+  const groups = await chrome.tabGroups.query({});
+  return groups.sort((a, b) => (b.windowId === windowId) - (a.windowId === windowId));
+}
+
+// Puts each planned group's tabs into the existing group of the same name, or a
+// new group. Tabs that closed or left the scope meanwhile are skipped. With
+// allWindows, groups and tabs from other windows are moved into this window.
+async function applyGroups(windowId, groups, allWindows = false) {
+  const live = new Set((await groupableTabs(windowId, allWindows)).map((t) => t.id));
+  const existing = await groupsInScope(windowId, allWindows);
   let applied = 0;
   for (const group of groups) {
     const tabIds = [...new Set(group.tabIds)].filter((id) => live.has(id));
@@ -38,11 +49,15 @@ async function applyGroups(windowId, groups) {
     const color = COLORS.includes(group.color) ? group.color : colorFor(name);
     const match = existing.find((g) => (g.title || "").toLowerCase() === name.toLowerCase());
     if (match) {
+      if (match.windowId !== windowId) {
+        await chrome.tabGroups.move(match.id, { windowId, index: -1 });
+        match.windowId = windowId;
+      }
       await chrome.tabs.group({ groupId: match.id, tabIds });
     } else {
       const groupId = await chrome.tabs.group({ tabIds, createProperties: { windowId } });
       await chrome.tabGroups.update(groupId, { title: name, color });
-      existing.push({ id: groupId, title: name });
+      existing.push({ id: groupId, title: name, windowId });
     }
     tabIds.forEach((id) => live.delete(id));
     applied++;
@@ -50,12 +65,19 @@ async function applyGroups(windowId, groups) {
   return applied;
 }
 
+// " from 3 windows", or nothing when every tab is in one window.
+function windowsNote(tabs) {
+  const n = new Set(tabs.map((t) => t.windowId)).size;
+  return n > 1 ? ` from ${n} windows` : "";
+}
+
 async function groupByRules(windowId) {
   const settings = await getSettings();
-  const tabs = await groupableTabs(windowId);
+  const allWindows = settings.manualScope === "all";
+  const tabs = await groupableTabs(windowId, allWindows);
   const { groups } = planRuleAndDomainGroups(tabs, parseRules(settings.rules), settings.minDomainGroupSize);
-  const n = await applyGroups(windowId, groups);
-  return `Made or updated ${n} group${n === 1 ? "" : "s"}.`;
+  const n = await applyGroups(windowId, groups, allWindows);
+  return `Made or updated ${n} group${n === 1 ? "" : "s"}${windowsNote(tabs)}.`;
 }
 
 async function askClaude(payload) {
@@ -75,22 +97,24 @@ async function askClaude(payload) {
   }
 }
 
-async function existingGroupNames(windowId) {
-  return (await chrome.tabGroups.query({ windowId })).map((g) => g.title).filter(Boolean);
+async function existingGroupNames(windowId, allWindows = false) {
+  const names = (await groupsInScope(windowId, allWindows)).map((g) => g.title).filter(Boolean);
+  return [...new Set(names)];
 }
 
 async function organizeWithClaude(windowId) {
   const settings = await getSettings();
-  const tabs = await groupableTabs(windowId);
+  const allWindows = settings.manualScope === "all";
+  const tabs = await groupableTabs(windowId, allWindows);
   if (tabs.length < 2) return "Not enough tabs to organize.";
   const groups = await askClaude({
     mode: "organize",
     tabs: tabs.map(describeTab),
-    existingGroups: await existingGroupNames(windowId),
+    existingGroups: await existingGroupNames(windowId, allWindows),
     rules: settings.rules,
   });
-  const n = await applyGroups(windowId, groups);
-  return `Claude organized ${tabs.length} tabs into ${n} group${n === 1 ? "" : "s"}.`;
+  const n = await applyGroups(windowId, groups, allWindows);
+  return `Claude organized ${tabs.length} tabs${windowsNote(tabs)} into ${n} group${n === 1 ? "" : "s"}.`;
 }
 
 async function ungroupAll(windowId) {

@@ -113,6 +113,22 @@ The settings page also lets you choose the Claude model (Haiku by default,
 which is fast and cheap) and how many tabs from one site it takes to make a
 site group.
 
+### One window or all windows
+
+By default, **Organize with Claude** and **Group by rules and domain** only
+touch the window you run them from. Set **"Organize with Claude" and "Group by
+rules and domain" work on** to **All windows** on the settings page to gather
+related tabs from every window into the window you're in:
+
+- Tabs from all windows are grouped together, and each group is built in the
+  current window. An existing group in another window moves over whole.
+- Tabs that don't end up in a group stay where they are.
+- A window left with no tabs closes, as it would if you dragged its last tab away.
+- With "Organize with Claude", Claude sees every window's tabs, so each run
+  costs more.
+
+"Ungroup all" always works on the current window only.
+
 ## How it works
 
 ### Grouping
@@ -143,8 +159,8 @@ unless you turn on **Move new tabs to a matching group in another window** in
 settings. With that on, a new tab that has no matching group in its own window
 but does have one in another window (by steps 2 and 3 above) moves into that
 group. If you were looking at the tab, Clowder switches to that window too, so
-the page doesn't seem to disappear. Claude's suggestions and rule-based
-grouping still only work within a window.
+the page doesn't seem to disappear. This setting only affects new tabs. For
+the manual buttons, see [One window or all windows](#one-window-or-all-windows).
 
 Auto-grouping leaves pinned tabs and tabs already in a group alone. It also
 handles each tab only once per site, so if you drag a tab out of a group,
