@@ -138,6 +138,14 @@ This covers tabs you open from other apps, like a link clicked in Slack or
 email. Links you open from a tab that's already in a group join that group
 on their own, because Chrome does that itself.
 
+Grouping stays inside one window: Clowder never moves tabs between windows
+unless you turn on **Move new tabs to a matching group in another window** in
+settings. With that on, a new tab that has no matching group in its own window
+but does have one in another window (by steps 2 and 3 above) moves into that
+group. If you were looking at the tab, Clowder switches to that window too, so
+the page doesn't seem to disappear. Claude's suggestions and rule-based
+grouping still only work within a window.
+
 Auto-grouping leaves pinned tabs and tabs already in a group alone. It also
 handles each tab only once per site, so if you drag a tab out of a group,
 Clowder won't drag it back in unless the tab goes to a different site.

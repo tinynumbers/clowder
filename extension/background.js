@@ -143,6 +143,30 @@ function schedule(map, windowId, delay, fn) {
   }, delay));
 }
 
+// The existing group a new tab belongs in: the one its rule or site label
+// names, or, with no rule, the one already holding tabs from its site.
+function findMatchingGroup(tab, rules, tabs, groups) {
+  const rule = matchRule(rules, tab.url);
+  const site = siteOf(tab.url);
+  const name = rule ? rule.name : site && labelForSite(site);
+  let group = name && groups.find((g) => (g.title || "").toLowerCase() === name.toLowerCase());
+  if (!group && !rule) {
+    const groupId = groupForSite(tabs, site);
+    group = groups.find((g) => g.id === groupId);
+  }
+  return group?.title ? group : null;
+}
+
+// Moves a tab into a group in another window. If the tab was the one being
+// looked at, follow it so the page doesn't seem to vanish.
+async function moveToGroupElsewhere(tab, group) {
+  await chrome.tabs.group({ groupId: group.id, tabIds: [tab.id] });
+  if (tab.active) {
+    await chrome.windows.update(group.windowId, { focused: true });
+    await chrome.tabs.update(tab.id, { active: true });
+  }
+}
+
 async function autoGroupWindow(windowId) {
   const settings = await getSettings();
   const rules = parseRules(settings.rules);
@@ -152,26 +176,36 @@ async function autoGroupWindow(windowId) {
   if (!fresh.length) return;
   fresh.forEach((t) => handledSite.set(t.id, siteOf(t.url)));
 
-  // A new tab joins an existing group when its rule or its site label names
-  // one, or, with no rule, when a group already holds tabs from its site.
+  // Only when no group in this window fits does it look at other windows.
+  let elsewhere = null;
+  if (settings.joinGroupsAcrossWindows) {
+    const all = await chrome.tabs.query({ windowType: "normal", pinned: false });
+    const allGroups = await chrome.tabGroups.query({});
+    const windowIds = new Set(all.map((t) => t.windowId));
+    elsewhere = {
+      tabs: all.filter((t) => t.windowId !== windowId),
+      groups: allGroups.filter((g) => g.windowId !== windowId && windowIds.has(g.windowId)),
+    };
+  }
+
   const toExisting = [];
   const rest = [];
+  const placed = new Set();
   for (const tab of fresh) {
-    const rule = matchRule(rules, tab.url);
-    const site = siteOf(tab.url);
-    const name = rule ? rule.name : site && labelForSite(site);
-    let group = name && existing.find((g) => (g.title || "").toLowerCase() === name.toLowerCase());
-    if (!group && !rule) {
-      const groupId = groupForSite(tabs, site);
-      group = existing.find((g) => g.id === groupId);
+    const group = findMatchingGroup(tab, rules, tabs, existing);
+    const other = !group && elsewhere && findMatchingGroup(tab, rules, elsewhere.tabs, elsewhere.groups);
+    if (group) toExisting.push({ name: group.title, tabIds: [tab.id] });
+    else if (other) await moveToGroupElsewhere(tab, other);
+    else {
+      rest.push(tab);
+      continue;
     }
-    if (group?.title) toExisting.push({ name: group.title, tabIds: [tab.id] });
-    else rest.push(tab);
+    placed.add(tab.id);
   }
   await applyGroups(windowId, toExisting);
 
   // Otherwise group with other ungrouped tabs that share a rule or site.
-  const ungrouped = tabs.filter((t) => t.groupId === -1 && !toExisting.some((g) => g.tabIds[0] === t.id));
+  const ungrouped = tabs.filter((t) => t.groupId === -1 && !placed.has(t.id));
   const { groups, leftovers } = planRuleAndDomainGroups(ungrouped, rules, settings.minDomainGroupSize);
   const restIds = new Set(rest.map((t) => t.id));
   await applyGroups(windowId, groups.filter((g) => g.tabIds.some((id) => restIds.has(id))));

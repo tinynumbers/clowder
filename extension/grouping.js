@@ -5,6 +5,7 @@ export const COLORS = ["grey", "blue", "red", "yellow", "green", "pink", "purple
 export const DEFAULT_SETTINGS = {
   autoGroup: true,
   useClaudeForUnmatched: false,
+  joinGroupsAcrossWindows: false,
   minDomainGroupSize: 2,
   model: "haiku",
   rules: "",
