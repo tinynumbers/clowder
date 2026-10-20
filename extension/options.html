@@ -8,7 +8,9 @@
     textarea { width: 100%; height: 220px; font: 13px ui-monospace, monospace; box-sizing: border-box; }
     label { display: block; margin: 14px 0 4px; font-weight: 600; }
     .hint { color: #666; font-size: 12px; margin: 4px 0; }
-    input[type=number], select { font: inherit; padding: 3px; }
+    input[type=number], input[type=text], select { font: inherit; padding: 3px; }
+    input[type=text] { width: 260px; }
+    h2 { font-size: 16px; margin: 28px 0 0; }
     button { margin-top: 16px; padding: 7px 16px; font: inherit; }
     #saved { margin-left: 10px; color: #2e7d32; }
     code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; }
@@ -37,6 +39,24 @@
 atlassian.net = Jira, cyan
 /localhost:\d+/ = Local dev, green
 # comments are ignored"></textarea>
+
+  <h2>Linked tabs</h2>
+  <p class="hint">Tabs that mention the same Jira ticket (in the title, URL, or a PR's branch name) are kept
+    in one group, ahead of rules and site grouping.</p>
+
+  <label for="jiraProjects">Jira project keys</label>
+  <input type="text" id="jiraProjects" placeholder="PD, CASE" spellcheck="false">
+  <p class="hint">Comma-separated. Projects of any Jira ticket you have open are picked up automatically, so
+    this is only needed for linking PRs to tickets that aren't open.</p>
+
+  <label><input type="checkbox" id="githubLookups"> Look up pull requests on GitHub</label>
+  <p class="hint">Uses your <code>gh</code> command to read each open PR's milestone, branch, and CI checks, so
+    CircleCI runs join their PR and PRs can be grouped by milestone. It asks GitHub only about the PRs you
+    have open, using whichever account <code>gh</code> is logged in to.</p>
+  <label><input type="checkbox" id="groupByMilestone"> Group pull requests that share a milestone</label>
+  <p class="hint">Along with their tickets and CI runs. Off: one group per ticket.</p>
+
+  <h2>Other settings</h2>
 
   <label for="minDomainGroupSize">Group a domain once it has this many tabs</label>
   <input type="number" id="minDomainGroupSize" min="1" max="20">

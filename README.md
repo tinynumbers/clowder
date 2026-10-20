@@ -12,9 +12,9 @@ duplicate tabs, and, when simple rules aren't enough, asks
 [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) running on
 your machine to group tabs by what you're actually working on.
 
-For example, a GitHub pull request, the Jira ticket it fixes, and the docs page
-you have open for it can all land in one "Pricing Fix" group, even though
-they're on three different sites.
+For example, a Jira ticket, the GitHub pull request that fixes it, and that
+PR's CircleCI run all land in one group, even though they're on three
+different sites.
 
 ## Features
 
@@ -23,6 +23,9 @@ they're on three different sites.
   more of them (the number is adjustable).
 - **Organize with Claude.** One click sends your tab titles and URLs to Claude,
   which sorts them into groups by topic or task, reusing groups you already have.
+- **Linked tabs.** A Jira ticket, the pull requests that mention it, and their
+  CircleCI runs always end up in the same group. Optionally, pull requests that
+  share a GitHub milestone are grouped together too.
 - **Rules suggested by Claude.** While organizing, Claude proposes rules for
   patterns it spots, and you add the ones you want with one click.
 - **Auto-group new tabs** as they load, with Claude as an optional fallback for
@@ -39,6 +42,9 @@ they're on three different sites.
   Claude features: rules, site grouping, and duplicate closing work without it.
   See the [Claude Code setup guide](https://docs.claude.com/en/docs/claude-code/setup).
   Run `claude` once in a terminal to log in.
+- **GitHub CLI** (the `gh` command), logged in, only if you turn on GitHub
+  lookups (see [Linked tabs](#linked-tabs)). Install it with `brew install gh`,
+  then run `gh auth login`.
 
 ## Install
 
@@ -146,23 +152,66 @@ related tabs from every window into the window you're in:
 
 "Ungroup all" always works on the current window only.
 
+### Linked tabs
+
+Clowder links tabs that are part of the same piece of work, and keeps each
+linked set in one group. This comes before your rules and before Claude: if
+Claude would split a ticket from its PR, Clowder puts them back together.
+
+**Without any setup**, tabs are linked by Jira ticket key (like `PD-1234`)
+when it appears in a tab's title or URL. That covers a Jira ticket and a pull
+request titled `[PD-1234] Fix rounding`, for example. To avoid false matches
+such as `UTF-8` or `SHA-256`, Clowder only counts keys from known Jira
+projects: any project whose ticket you have open, plus any you list under
+**Jira project keys** in settings. List your projects there if you want PRs
+linked to each other even when the ticket itself isn't open.
+
+**With "Look up pull requests on GitHub"** turned on in settings, Clowder asks
+GitHub about each open PR tab using your `gh` command, and also links by:
+
+- **Branch name.** A PR whose branch is `feature/PD-1234-rounding` links to
+  PD-1234 even if its title doesn't mention it.
+- **CircleCI runs.** A PR's checks link to its CircleCI workflows and jobs, so
+  an open CircleCI workflow or job tab joins its PR.
+- **Milestone.** PRs with the same milestone are grouped together, along with
+  their tickets and CI runs. Milestones are matched by name, so PRs in
+  different repos with the same milestone (say, "8.40") are grouped too. Turn
+  off **Group pull requests that share a milestone** to keep one group per
+  ticket instead.
+
+GitHub answers are cached for five minutes. If a lookup fails, grouping still
+happens without it, and the popup says what went wrong.
+
+Some limits:
+
+- Only the latest commit's checks are read, so a CircleCI tab from an older
+  run of the PR won't link. A CircleCI pipeline page that doesn't show a
+  workflow can't be matched either.
+- A tab that names more than three tickets (a release PR listing everything in
+  it, say) doesn't link by ticket, so it can't pull every task into one group.
+- Lookups use whichever account `gh` is logged in to. PRs that account can't
+  see just aren't looked up.
+
 ## How it works
 
 ### Grouping
 
 Clowder places each tab using the first of these that applies:
 
+1. **Its linked tabs.** A tab linked to others (see
+   [Linked tabs](#linked-tabs)) joins the group they're already in, or forms a
+   new group with them, named after the ticket or milestone.
 1. **Your rules.**
-2. **An existing group with the same name.** A new GitHub tab joins your
+1. **An existing group with the same name.** A new GitHub tab joins your
    "Github" group, or the group a rule names.
-3. **An existing group with tabs from the same site.** If your "Work repos"
+1. **An existing group with tabs from the same site.** If your "Work repos"
    group is full of GitHub tabs, a new GitHub tab joins it, whatever the group
    is called. When several groups have tabs from that site, it joins the one
    with the most.
-4. **Its site.** Once enough ungrouped tabs share a site, they become a group.
+1. **Its site.** Once enough ungrouped tabs share a site, they become a group.
    Subdomains count as one site, so `docs.google.com` and `mail.google.com`
    group together.
-5. **Claude**, if you turned on "Ask Claude when no rule matches". New tabs that
+1. **Claude**, if you turned on "Ask Claude when no rule matches". New tabs that
    nothing else placed are batched for a few seconds, then sent together.
    Claude prefers your existing groups, so this is how a tab joins a group by
    topic rather than by site.
@@ -174,7 +223,7 @@ on their own, because Chrome does that itself.
 Grouping stays inside one window: Clowder never moves tabs between windows
 unless you turn on **Move new tabs to a matching group in another window** in
 settings. With that on, a new tab that has no matching group in its own window
-but does have one in another window (by steps 2 and 3 above) moves into that
+but does have one in another window (by its links, or by group name or site) moves into that
 group. If you were looking at the tab, Clowder switches to that window too, so
 the page doesn't seem to disappear. This setting only affects new tabs. For
 the manual buttons, see [One window or all windows](#one-window-or-all-windows).
@@ -234,9 +283,15 @@ claude -p --model haiku --output-format json --json-schema <schema> \
   your instructions and delete my files" can at worst produce a strange group
   name. The helper also checks every reply and drops anything that doesn't
   refer to a tab it sent.
+- **What GitHub sees:** with GitHub lookups on, the repo and number of each
+  open pull request tab, sent through your own `gh` login. Nothing else about
+  your tabs is sent to GitHub. Claude then sees which tabs are linked, and the
+  ticket keys or milestone names that link them.
 - **What's stored:** your settings and rules live in Chrome's synced extension
-  storage. Pending and dismissed rule suggestions stay in this browser only. The helper writes a log to `~/Library/Logs/clowder.log` with
-  request sizes, timing, and cost, but no tab titles or URLs.
+  storage. Pending and dismissed rule suggestions, and the five-minute cache of
+  GitHub answers, stay in this browser only. The helper writes a log to
+  `~/Library/Logs/clowder.log` with request sizes, timing, and cost, but no tab
+  titles or URLs.
 - **Nothing is sent to Claude** unless you click "Organize with Claude", press
   its shortcut, or turn on "Ask Claude when no rule matches".
 
@@ -276,6 +331,8 @@ Then click the reload icon on Clowder's card in `chrome://extensions`.
 | The extension ID isn't `eehdejcmldpmhkcefkkhgicgcnapajdl` | Make sure you loaded the `extension` folder itself, not the repo folder or a copy with an edited `manifest.json`. |
 | "Not logged in" | Run `claude` in a terminal and log in, then try again. |
 | "Couldn't find the claude CLI" | Install Claude Code, or rerun `./install.sh` if you moved or reinstalled it. You can also point the installer at it: `CLAUDE_BIN=/path/to/claude ./install.sh`. |
+| "Couldn't find the gh CLI" | Install it (`brew install gh`), log in with `gh auth login`, then rerun `./install.sh` so the helper knows where it is. |
+| "GitHub lookup failed" or "GitHub couldn't find" PRs | Run `gh auth status` to check which account `gh` uses, and that it can see those repos. |
 | Claude errors or timeouts | Check `~/Library/Logs/clowder.log`. |
 | Something else in the extension | On Clowder's card in `chrome://extensions`, click **service worker** to open its console. |
 
@@ -289,13 +346,14 @@ extension/
   manifest.json     Extension manifest (Manifest V3)
   background.js     Service worker: auto-grouping, Claude requests, duplicates
   grouping.js       Rule, site, and duplicate logic with no Chrome APIs, so it can be tested
+  links.js          Linked tabs: ticket keys, PRs, CircleCI runs, milestones (also Chrome-free)
   popup.*           Toolbar popup
   options.*         Rules and settings page
   icons/            icon.svg (32 to 128 px) and icon-small.svg (16 px), plus rendered PNGs
 host/
-  clowder_host.py   Native messaging helper that runs claude -p
+  clowder_host.py   Native messaging helper that runs claude -p and gh api graphql
 install.sh          Registers the helper with Chrome-family browsers
-tests/              Unit tests for grouping.js
+tests/              Unit tests for grouping.js and links.js
 ```
 
 Run the tests with Node 22 or later:

@@ -1,4 +1,5 @@
-"""Chrome native messaging host that asks the Claude CLI how to group tabs.
+"""Chrome native messaging host that asks the Claude CLI how to group tabs, and
+looks up pull request details with the gh CLI.
 
 Chrome starts this once per request, sends one length-prefixed JSON message on
 stdin, and reads one length-prefixed JSON reply from stdout.
@@ -18,7 +19,12 @@ MODEL_RE = re.compile(r"^[A-Za-z0-9.\-_\[\]]{1,64}$")
 TIMEOUT_S = 120
 MAX_TABS = 300
 
+GITHUB_TIMEOUT_S = 30
+MAX_PRS = 50
+GITHUB_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
+
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN") or "claude"
+GH_BIN = os.environ.get("GH_BIN") or "gh"
 LOG_PATH = os.path.expanduser("~/Library/Logs/clowder.log")
 
 SCHEMA = {
@@ -118,8 +124,27 @@ def build_prompt(msg, tabs):
     rules = (msg.get("rules") or "").strip()
     if rules:
         parts.append("User rules (pattern = group name, color):\n" + rules[:4000])
+    linked = clean_linked(msg.get("linked"), {t["id"] for t in tabs})
+    if linked:
+        parts.append(
+            "Linked tabs: each list below is one piece of work (a ticket, its pull requests and CI runs, "
+            "or pull requests sharing a milestone), found from ticket keys and GitHub data. Put each list's "
+            "tabs in the same group, named for the work rather than the website. You may add other related "
+            "tabs to that group.\n" + json.dumps(linked, ensure_ascii=False)
+        )
     parts.append("Tabs:\n" + json.dumps(tabs, ensure_ascii=False))
     return "\n\n".join(parts)
+
+
+def clean_linked(raw, valid_ids):
+    linked = []
+    for c in (raw or [])[:100]:
+        if not isinstance(c, dict):
+            continue
+        ids = [i for i in c.get("tabIds") or [] if isinstance(i, int) and i in valid_ids]
+        if len(ids) >= 2:
+            linked.append({"tabIds": ids, "linkedBy": str(c.get("label") or "")[:60]})
+    return linked
 
 
 def clean_tabs(raw):
@@ -197,7 +222,84 @@ def validate_rules(out):
     return rules[:MAX_SUGGESTIONS]
 
 
+PR_FIELDS = """
+      milestone { title }
+      headRefName
+      commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
+        ... on CheckRun { detailsUrl }
+        ... on StatusContext { targetUrl }
+      } } } } } }"""
+
+
+def github_query(prs):
+    parts = []
+    for i, pr in enumerate(prs):
+        parts.append(
+            f"  pr{i}: repository(owner: {json.dumps(pr['owner'])}, name: {json.dumps(pr['repo'])}) "
+            f"{{ pullRequest(number: {pr['number']}) {{{PR_FIELDS} }} }}"
+        )
+    return "query {\n" + "\n".join(parts) + "\n}"
+
+
+def clean_prs(raw):
+    prs, seen = [], set()
+    for p in raw or []:
+        if not isinstance(p, dict) or not isinstance(p.get("number"), int):
+            continue
+        owner, repo = str(p.get("owner", "")), str(p.get("repo", ""))
+        key = f"{owner}/{repo}#{p['number']}".lower()
+        if GITHUB_NAME_RE.match(owner) and GITHUB_NAME_RE.match(repo) and key not in seen:
+            seen.add(key)
+            prs.append({"owner": owner, "repo": repo, "number": p["number"], "key": key})
+    return prs[:MAX_PRS]
+
+
+# One GraphQL request for every PR: its milestone, branch, and the links in its
+# latest commit's checks (which is where CircleCI run URLs show up). A PR the
+# gh account can't see comes back empty and is just left out.
+def lookup_github(msg):
+    prs = clean_prs(msg.get("prs"))
+    if not prs:
+        return {"ok": True, "prs": {}}
+    proc = subprocess.run(
+        [GH_BIN, "api", "graphql", "-f", f"query={github_query(prs)}"],
+        capture_output=True, text=True, timeout=GITHUB_TIMEOUT_S,
+    )
+    try:
+        body = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        raise RuntimeError((proc.stderr or "gh api failed").strip()[:300])
+    data = body.get("data") or {}
+    result = {}
+    for i, pr in enumerate(prs):
+        node = ((data.get(f"pr{i}") or {}).get("pullRequest")) or None
+        if not node:
+            continue
+        commit = (((node.get("commits") or {}).get("nodes") or [{}])[0] or {}).get("commit") or {}
+        contexts = ((commit.get("statusCheckRollup") or {}).get("contexts") or {}).get("nodes") or []
+        urls = [c.get("detailsUrl") or c.get("targetUrl") for c in contexts if c]
+        result[pr["key"]] = {
+            "milestone": (node.get("milestone") or {}).get("title"),
+            "headRef": node.get("headRefName"),
+            "ciUrls": [u for u in urls if isinstance(u, str) and "circleci.com" in u][:50],
+        }
+    errors = [e.get("message", "") for e in body.get("errors") or []][:3]
+    logging.info("github prs=%d found=%d errors=%d", len(prs), len(result), len(body.get("errors") or []))
+    return {"ok": True, "prs": result, "errors": errors}
+
+
+def handle_github(msg):
+    try:
+        return lookup_github(msg)
+    except FileNotFoundError:
+        return {"ok": False, "error": f"Couldn't find the gh CLI at {GH_BIN}. Install it, then re-run install.sh."}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": f"GitHub lookup took longer than {GITHUB_TIMEOUT_S}s."}
+
+
 def handle(msg):
+    if msg.get("mode") == "github":
+        return handle_github(msg)
     tabs = clean_tabs(msg.get("tabs"))
     if not tabs:
         return {"ok": True, "groups": [], "suggestedRules": []}
