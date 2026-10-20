@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Clowder: a row of browser tabs shaped like cat heads. The front cat is
+       the active tab, joined to the page below it like a real tab strip. -->
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="#D97757"/>
+  <!-- background tabs -->
+  <g fill="#F4C9B6">
+    <path d="M12 96 V58 Q12 52 14 48 L20 30 L34 44 H40 L54 30 L60 48 Q62 52 62 58 V96 Z"/>
+    <path d="M66 96 V58 Q66 52 68 48 L74 30 L88 44 H94 L108 30 L114 48 Q116 52 116 58 V96 Z"/>
+  </g>
+  <!-- page under the tab strip -->
+  <rect x="12" y="96" width="104" height="14" rx="3" fill="#FFFFFF"/>
+  <!-- active tab -->
+  <path d="M30 104 V58 Q30 52 32 46 L40 20 L58 40 H70 L88 20 L96 46 Q98 52 98 58 V104 Z" fill="#FFFFFF"/>
+  <!-- face -->
+  <ellipse cx="51" cy="66" rx="6.5" ry="8.5" fill="#2B1D16"/>
+  <ellipse cx="77" cy="66" rx="6.5" ry="8.5" fill="#2B1D16"/>
+  <path d="M58.5 80 H69.5 L64 86.5 Z" fill="#D97757"/>
+</svg>

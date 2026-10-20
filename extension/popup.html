@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font: 13px system-ui, sans-serif; width: 260px; margin: 12px; color: #222; }
+    button { display: block; width: 100%; margin: 0 0 6px; padding: 7px; font: inherit; cursor: pointer;
+             border: 1px solid #ccc; border-radius: 6px; background: #f7f7f7; }
+    button.primary { background: #d97757; border-color: #c4643f; color: #fff; }
+    button:disabled { opacity: .6; cursor: wait; }
+    label { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
+    #status { min-height: 1.2em; margin-top: 8px; color: #555; }
+    #status.error { color: #b3261e; }
+    hr { border: none; border-top: 1px solid #e5e5e5; margin: 10px 0; }
+    a { color: #555; }
+  </style>
+</head>
+<body>
+  <button id="organizeWithClaude" class="primary">Organize with Claude</button>
+  <button id="groupByRules">Group by rules and domain</button>
+  <button id="ungroupAll">Ungroup all</button>
+  <button id="closeDuplicates">Close duplicate tabs</button>
+  <hr>
+  <label><input type="checkbox" id="autoGroup"> Auto-group new tabs</label>
+  <label><input type="checkbox" id="useClaudeForUnmatched"> Ask Claude when no rule matches</label>
+  <div id="status"></div>
+  <hr>
+  <a href="options.html" target="_blank">Rules and settings</a>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

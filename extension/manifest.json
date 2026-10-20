@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Clowder",
+  "version": "0.1.0",
+  "description": "Herds your tabs into groups by rule and domain, with a little help from your local Claude CLI.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoVIVuvc9DNp4TuNuMKOybhvHXAsfMRZXY8pmdtiNQMB9nIaZFLX84MC5zncdiWMMsOAJPRxOyc43WquYZUO8UF7Chf3LiaFkHfqCcknqDLBtmwJSasiIKLclU1beGQ2pX/H6gjK2aZJRH3z+jBKB6pg1lvw8KBsgZaaRgjGS4F2q0c7ycMvN43rxNtgQSJAw+9+bLjMd4PH+fT/WPRuVdBtt/hLxlmUdon+IF0gVBSB4rT4oDb++BnXTHqeVo6fMSZK5YmnbpkT4jV+C3jVea7aUFXFuy/Hbsv0x6aRCxnh0bln2Ye9erVDBBn4kgukvkjrK1beYptLTRBmGQgcr0QIDAQAB",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["tabs", "tabGroups", "storage", "nativeMessaging"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Clowder: herd your tabs",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    },
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "commands": {
+    "organize-with-claude": {
+      "suggested_key": { "default": "Alt+Shift+G" },
+      "description": "Organize this window's tabs with Claude"
+    },
+    "group-by-rules": {
+      "suggested_key": { "default": "Alt+Shift+D" },
+      "description": "Group this window's tabs by rules and domain"
+    },
+    "close-duplicates": {
+      "suggested_key": { "default": "Alt+Shift+X" },
+      "description": "Close duplicate tabs, keeping the most recently loaded copy"
+    }
+  }
+}

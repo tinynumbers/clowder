@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- 16px version of icon.svg: just the active-tab cat, drawn on the pixel grid. -->
+  <rect x="0" y="0" width="16" height="16" rx="3.5" fill="#D97757"/>
+  <path d="M3 14 V6 L4 2 L6.5 4.5 H9.5 L12 2 L13 6 V14 Z" fill="#FFFFFF"/>
+  <rect x="5" y="7" width="2" height="2" fill="#2B1D16"/>
+  <rect x="9" y="7" width="2" height="2" fill="#2B1D16"/>
+</svg>
