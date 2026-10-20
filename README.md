@@ -122,11 +122,21 @@ Clowder places each tab using the first of these that applies:
 1. **Your rules.**
 2. **An existing group with the same name.** A new GitHub tab joins your
    "Github" group, or the group a rule names.
-3. **Its site.** Once enough ungrouped tabs share a site, they become a group.
+3. **An existing group with tabs from the same site.** If your "Work repos"
+   group is full of GitHub tabs, a new GitHub tab joins it, whatever the group
+   is called. When several groups have tabs from that site, it joins the one
+   with the most.
+4. **Its site.** Once enough ungrouped tabs share a site, they become a group.
    Subdomains count as one site, so `docs.google.com` and `mail.google.com`
    group together.
-4. **Claude**, if you turned on "Ask Claude when no rule matches". New tabs that
+5. **Claude**, if you turned on "Ask Claude when no rule matches". New tabs that
    nothing else placed are batched for a few seconds, then sent together.
+   Claude prefers your existing groups, so this is how a tab joins a group by
+   topic rather than by site.
+
+This covers tabs you open from other apps, like a link clicked in Slack or
+email. Links you open from a tab that's already in a group join that group
+on their own, because Chrome does that itself.
 
 Auto-grouping leaves pinned tabs and tabs already in a group alone. It also
 handles each tab only once per site, so if you drag a tab out of a group,

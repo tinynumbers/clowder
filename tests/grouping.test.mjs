@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { describeTab, findDuplicatesToClose, matchRule, parseRules, planRuleAndDomainGroups, siteOf } from "../extension/grouping.js";
+import { describeTab, findDuplicatesToClose, groupForSite, matchRule, parseRules, planRuleAndDomainGroups, siteOf } from "../extension/grouping.js";
 
 test("parseRules reads substring and regex rules, skipping junk", () => {
   const rules = parseRules(`
@@ -78,4 +78,18 @@ test("findDuplicatesToClose never closes pinned tabs", () => {
     { id: 4, url: "https://b.com/", pinned: true },
   ];
   assert.deepEqual(findDuplicatesToClose(tabs, { 2: 999 }), [2]);
+});
+
+test("groupForSite picks the group holding the most tabs from that site", () => {
+  const tabs = [
+    { id: 1, groupId: 10, url: "https://github.com/org/a" },
+    { id: 2, groupId: 10, url: "https://github.com/org/b" },
+    { id: 3, groupId: 20, url: "https://gist.github.com/x" },
+    { id: 4, groupId: 20, url: "https://news.ycombinator.com/" },
+    { id: 5, groupId: -1, url: "https://github.com/org/c" },
+  ];
+  assert.equal(groupForSite(tabs, "github.com"), 10);
+  assert.equal(groupForSite(tabs, "ycombinator.com"), 20);
+  assert.equal(groupForSite(tabs, "example.com"), null);
+  assert.equal(groupForSite(tabs, null), null);
 });

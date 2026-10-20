@@ -4,6 +4,7 @@ import {
   colorFor,
   describeTab,
   findDuplicatesToClose,
+  groupForSite,
   labelForSite,
   matchRule,
   parseRules,
@@ -151,15 +152,20 @@ async function autoGroupWindow(windowId) {
   if (!fresh.length) return;
   fresh.forEach((t) => handledSite.set(t.id, siteOf(t.url)));
 
-  // A new tab joins an existing group when its rule or its site label names one.
+  // A new tab joins an existing group when its rule or its site label names
+  // one, or, with no rule, when a group already holds tabs from its site.
   const toExisting = [];
   const rest = [];
   for (const tab of fresh) {
     const rule = matchRule(rules, tab.url);
     const site = siteOf(tab.url);
     const name = rule ? rule.name : site && labelForSite(site);
-    const group = name && existing.find((g) => (g.title || "").toLowerCase() === name.toLowerCase());
-    if (group) toExisting.push({ name: group.title, tabIds: [tab.id] });
+    let group = name && existing.find((g) => (g.title || "").toLowerCase() === name.toLowerCase());
+    if (!group && !rule) {
+      const groupId = groupForSite(tabs, site);
+      group = existing.find((g) => g.id === groupId);
+    }
+    if (group?.title) toExisting.push({ name: group.title, tabIds: [tab.id] });
     else rest.push(tab);
   }
   await applyGroups(windowId, toExisting);

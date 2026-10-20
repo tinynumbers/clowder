@@ -115,6 +115,21 @@ export function planRuleAndDomainGroups(tabs, rules, minSize) {
   return { groups, leftovers };
 }
 
+// The existing group holding the most tabs from this site, or null. Lets a
+// new github.com tab join a "Work repos" group full of GitHub tabs, whatever
+// the group is called.
+export function groupForSite(tabs, site) {
+  if (!site) return null;
+  const counts = new Map();
+  for (const tab of tabs) {
+    if (tab.groupId === -1 || tab.groupId === undefined || siteOf(tab.url) !== site) continue;
+    counts.set(tab.groupId, (counts.get(tab.groupId) || 0) + 1);
+  }
+  let best = null;
+  for (const [groupId, n] of counts) if (best === null || n > counts.get(best)) best = groupId;
+  return best;
+}
+
 // Returns ids of tabs to close so each URL is open once. The survivor is the
 // copy that finished loading last (loadedAt: tabId -> ms); tabs with no
 // recorded load fall back to lastAccessed, then to the newest tab id. Pinned
