@@ -309,6 +309,8 @@ async function autoGroupWindow(windowId) {
   // to, or forms one with linked tabs that aren't grouped yet.
   const scopeTabs = elsewhere ? [...tabs, ...elsewhere.tabs] : tabs;
   const { clusters } = await linkClusters(scopeTabs, settings);
+  const linkedIds = new Set(clusters.flatMap((c) => c.tabIds));
+  const unlinked = (list) => list.filter((t) => !linkedIds.has(t.id));
   const toExisting = [];
   const rest = [];
   const placed = new Set();
@@ -329,8 +331,10 @@ async function autoGroupWindow(windowId) {
       here.forEach((id) => placed.add(id));
       continue;
     }
-    const group = findMatchingGroup(tab, rules, tabs, existing);
-    const other = !group && elsewhere && findMatchingGroup(tab, rules, elsewhere.tabs, elsewhere.groups);
+    // Linked tabs don't count toward a group's sites, or an unrelated GitHub
+    // tab would join a ticket's group just because it holds the ticket's PR.
+    const group = findMatchingGroup(tab, rules, unlinked(tabs), existing);
+    const other = !group && elsewhere && findMatchingGroup(tab, rules, unlinked(elsewhere.tabs), elsewhere.groups);
     if (group) toExisting.push({ name: group.title, tabIds: [tab.id] });
     else if (other) await moveToGroupElsewhere(tab, other);
     else {

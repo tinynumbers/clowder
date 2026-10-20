@@ -354,13 +354,42 @@ host/
   clowder_host.py   Native messaging helper that runs claude -p and gh api graphql
 install.sh          Registers the helper with Chrome-family browsers
 tests/              Unit tests for grouping.js and links.js
+  e2e/              End-to-end tests in Chrome for Testing (see below)
 ```
 
-Run the tests with Node 22 or later:
+Run the unit tests with Node 22 or later:
 
 ```bash
 node --test
 ```
+
+### End-to-end tests
+
+`tests/e2e` loads Clowder into a separate, throwaway copy of
+[Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing),
+opens tabs, runs each action the way the popup does, and checks the tab groups
+that result. It covers rule and site grouping, linked tabs (with and without
+GitHub lookups), Organize with Claude, auto-grouping, closing duplicates, both
+cross-window settings, and the settings page.
+
+```bash
+cd tests/e2e
+npm install
+npm run setup     # once: downloads Chrome for Testing (about 360 MB) into tests/e2e/.cache
+npm test          # HEADFUL=1 npm test to watch; npm test -- auto to run only matching scenarios
+```
+
+The tabs' addresses are real (`github.com`, `decisiv.atlassian.net`,
+`app.circleci.com`), but the test browser is pointed at a local server that
+serves stand-in pages, and every other site is blocked, so it never needs to
+log in anywhere. It does use the real helper, so run `./install.sh` first:
+GitHub lookups go through your `gh` login, and the Claude scenario makes one
+Claude call (about $0.002). The GitHub scenarios use real Decisiv pull
+requests, so they need a `gh` login that can see `Decisiv/pricing`.
+
+The suite doesn't cover clicking the toolbar popup or pressing keyboard
+shortcuts, which Chrome doesn't let tests do; it sends the popup's messages
+directly instead.
 
 After changing extension files, reload Clowder in `chrome://extensions`. After
 changing `host/clowder_host.py`, rerun `./install.sh`, which copies it into place.

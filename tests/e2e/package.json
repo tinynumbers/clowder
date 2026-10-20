@@ -1,0 +1,14 @@
+{
+  "name": "clowder-e2e",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end tests that load Clowder into Chrome for Testing",
+  "scripts": {
+    "setup": "browsers install chrome@stable --path .cache",
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "@puppeteer/browsers": "3.2.5",
+    "puppeteer-core": "25.15.0"
+  }
+}

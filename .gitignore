@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 extension/icons/big.png
 *.pem
+tests/e2e/node_modules/
+tests/e2e/.cache/
