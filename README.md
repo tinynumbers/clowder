@@ -23,6 +23,9 @@ different sites.
   more of them (the number is adjustable).
 - **Organize with Claude.** One click sends your tab titles and URLs to Claude,
   which sorts them into groups by topic or task, reusing groups you already have.
+- **Tell Claude what to group.** Type an instruction in the popup, like "put
+  the merged PRs in one group" or "group everything for PD-1235", and Claude
+  groups just those tabs. Standing instructions in settings apply every time.
 - **Linked tabs.** A Jira ticket, the pull requests that mention it, and their
   CircleCI runs always end up in the same group. Optionally, pull requests that
   share a GitHub milestone are grouped together too.
@@ -80,12 +83,44 @@ Try it: open a handful of tabs, click the Clowder icon, and choose
 
 | Button | What it does |
 |---|---|
+| **Group these with Claude** | Groups just the tabs your typed instruction describes. See [Telling Claude what to group](#telling-claude-what-to-group). |
 | **Organize with Claude** | Sends this window's tabs to Claude and applies the groups it suggests. |
 | **Group by rules and domain** | Groups this window's tabs by your rules, then by site. No Claude involved. |
 | **Ungroup all** | Removes every group in this window. The tabs stay open. |
 | **Close duplicate tabs** | Closes extra copies of the same URL in every window. |
 | **Auto-group new tabs** | Groups tabs as they finish loading. On by default. |
 | **Ask Claude when no rule matches** | Sends new tabs that no rule or site group catches to Claude. Off by default. |
+
+### Telling Claude what to group
+
+Type an instruction in the box at the top of the popup and click **Group these
+with Claude** (or press Return). For example:
+
+- "Put all the GitHub PRs that have already been merged into one group called Merged"
+- "Group together all the tabs related to Jira ticket PD-1235"
+- "Group together all the tabs related to the decisiv-claude-tools repo"
+
+Claude groups only the tabs your instruction covers. Every other tab stays
+where it is, including tabs in groups you've already made. If you name the
+group, Claude uses that name. Your last few instructions show up as
+suggestions in the box, so you can rerun one without retyping it.
+
+Claude sees each tab's title and URL, plus what Clowder knows about it: the
+Jira ticket keys it mentions, which tabs are linked (see
+[Linked tabs](#linked-tabs)), and for pull requests, with GitHub lookups on,
+the repo, state (open, merged or closed), milestone and branch. So an
+instruction about merged PRs, milestones or branches needs **Look up pull
+requests on GitHub** turned on in settings; the popup says so if it isn't.
+Instructions follow the **One window or all windows** setting like the other
+buttons.
+
+**Standing instructions** go in the box of that name in settings. They're sent
+with every Claude request (Organize with Claude, typed instructions, and new
+tabs when "Ask Claude when no rule matches" is on), for preferences like "keep
+merged PRs in a group called Merged" or "never group my email and calendar
+tabs". Standing and typed instructions outrank Clowder's own choices,
+including keeping linked tabs together: if you ask for merged PRs apart from
+their tickets, that's what you get.
 
 ### Keyboard shortcuts
 
@@ -156,7 +191,9 @@ related tabs from every window into the window you're in:
 
 Clowder links tabs that are part of the same piece of work, and keeps each
 linked set in one group. This comes before your rules and before Claude: if
-Claude would split a ticket from its PR, Clowder puts them back together.
+Claude would split a ticket from its PR, Clowder puts them back together. Only
+your own instructions outrank it (see
+[Telling Claude what to group](#telling-claude-what-to-group)).
 
 **Without any setup**, tabs are linked by Jira ticket key (like `PD-1234`)
 when it appears in a tab's title or URL. That covers a Jira ticket and a pull
@@ -167,7 +204,8 @@ projects: any project whose ticket you have open, plus any you list under
 linked to each other even when the ticket itself isn't open.
 
 **With "Look up pull requests on GitHub"** turned on in settings, Clowder asks
-GitHub about each open PR tab using your `gh` command, and also links by:
+GitHub about each open PR tab using your `gh` command. It also tells Claude
+each PR's state, for instructions like "group the merged PRs". And it links by:
 
 - **Branch name.** A PR whose branch is `feature/PD-1234-rounding` links to
   PD-1234 even if its title doesn't mention it.
@@ -272,7 +310,8 @@ claude -p --model haiku --output-format json --json-schema <schema> \
 ## Privacy and safety
 
 - **What Claude sees:** the title and URL of each tab being grouped, your group
-  names, and your rules. Clowder strips everything after `?` or `#` from URLs
+  names, your rules and instructions, and the ticket keys and PR details
+  Clowder looked up. Clowder strips everything after `?` or `#` from URLs
   first, since those parts often contain login tokens, email addresses, and
   search terms. It never reads page contents.
 - **Where it goes:** the same place as anything else you send through Claude
@@ -292,8 +331,12 @@ claude -p --model haiku --output-format json --json-schema <schema> \
   GitHub answers, stay in this browser only. The helper writes a log to
   `~/Library/Logs/clowder.log` with request sizes, timing, and cost, but no tab
   titles or URLs.
-- **Nothing is sent to Claude** unless you click "Organize with Claude", press
-  its shortcut, or turn on "Ask Claude when no rule matches".
+- **Nothing is sent to Claude** unless you click "Organize with Claude" or
+  "Group these with Claude", press a shortcut, or turn on "Ask Claude when no
+  rule matches".
+- **Your instructions are marked as yours.** Claude is told which text came
+  from you and which came from web pages, so a page title can't pass itself
+  off as one of your instructions.
 
 ## Cost
 
@@ -369,8 +412,9 @@ node --test
 [Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing),
 opens tabs, runs each action the way the popup does, and checks the tab groups
 that result. It covers rule and site grouping, linked tabs (with and without
-GitHub lookups), Organize with Claude, auto-grouping, closing duplicates, both
-cross-window settings, and the settings page.
+GitHub lookups), Organize with Claude, typed and standing instructions,
+auto-grouping, closing duplicates, both cross-window settings, and the
+settings page.
 
 ```bash
 cd tests/e2e
@@ -383,8 +427,8 @@ The tabs' addresses are real (`github.com`, `decisiv.atlassian.net`,
 `app.circleci.com`), but the test browser is pointed at a local server that
 serves stand-in pages, and every other site is blocked, so it never needs to
 log in anywhere. It does use the real helper, so run `./install.sh` first:
-GitHub lookups go through your `gh` login, and the Claude scenario makes one
-Claude call (about $0.002). The GitHub scenarios use real Decisiv pull
+GitHub lookups go through your `gh` login, and the Claude scenarios make six
+Claude calls (about $0.01 in all). The GitHub scenarios use real Decisiv pull
 requests, so they need a `gh` login that can see `Decisiv/pricing`.
 
 The suite doesn't cover clicking the toolbar popup or pressing keyboard

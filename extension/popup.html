@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <style>
-    body { font: 13px system-ui, sans-serif; width: 260px; margin: 12px; color: #222; }
+    body { font: 13px system-ui, sans-serif; width: 280px; margin: 12px; color: #222; }
     button { display: block; width: 100%; margin: 0 0 6px; padding: 7px; font: inherit; cursor: pointer;
              border: 1px solid #ccc; border-radius: 6px; background: #f7f7f7; }
     button.primary { background: #d97757; border-color: #c4643f; color: #fff; }
@@ -13,9 +13,20 @@
     #status.error { color: #b3261e; }
     hr { border: none; border-top: 1px solid #e5e5e5; margin: 10px 0; }
     a { color: #555; }
+    #instruction { width: 100%; box-sizing: border-box; padding: 7px; margin: 0 0 6px; font: inherit;
+                   border: 1px solid #ccc; border-radius: 6px; }
+    .hint { color: #777; font-size: 11px; margin: 0 0 6px; }
   </style>
 </head>
 <body>
+  <form id="instructForm">
+    <input id="instruction" list="recentInstructions" autocomplete="off"
+           placeholder="Tell Claude what to group…" aria-label="Instruction for Claude">
+    <datalist id="recentInstructions"></datalist>
+    <p class="hint">e.g. "Put the merged PRs in one group" or "Group everything for PD-1235"</p>
+    <button id="groupWithInstruction" type="submit">Group these with Claude</button>
+  </form>
+  <hr>
   <button id="organizeWithClaude" class="primary">Organize with Claude</button>
   <button id="groupByRules">Group by rules and domain</button>
   <button id="ungroupAll">Ungroup all</button>

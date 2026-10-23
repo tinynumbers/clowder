@@ -2,18 +2,38 @@ import { DEFAULT_SETTINGS } from "./grouping.js";
 
 const status = document.getElementById("status");
 const buttons = [...document.querySelectorAll("button")];
+const instruction = document.getElementById("instruction");
+const ASKS_CLAUDE = new Set(["organizeWithClaude", "groupWithInstruction"]);
+
+async function send(cmd, extra = {}) {
+  buttons.forEach((b) => (b.disabled = true));
+  status.className = "";
+  status.textContent = ASKS_CLAUDE.has(cmd) ? "Asking Claude…" : "Working…";
+  const win = await chrome.windows.getCurrent();
+  const reply = await chrome.runtime.sendMessage({ cmd, windowId: win.id, ...extra });
+  status.className = reply?.ok ? "" : "error";
+  status.textContent = reply?.message || "No response.";
+  buttons.forEach((b) => (b.disabled = false));
+  return reply;
+}
 
 for (const button of buttons) {
-  button.addEventListener("click", async () => {
-    buttons.forEach((b) => (b.disabled = true));
-    status.className = "";
-    status.textContent = button.id === "organizeWithClaude" ? "Asking Claude…" : "Working…";
-    const win = await chrome.windows.getCurrent();
-    const reply = await chrome.runtime.sendMessage({ cmd: button.id, windowId: win.id });
-    status.className = reply?.ok ? "" : "error";
-    status.textContent = reply?.message || "No response.";
-    buttons.forEach((b) => (b.disabled = false));
-  });
+  if (button.type !== "submit") button.addEventListener("click", () => send(button.id));
+}
+
+document.getElementById("instructForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!instruction.value.trim()) return instruction.focus();
+  const reply = await send("groupWithInstruction", { instruction: instruction.value });
+  if (reply?.ok) instruction.value = "";
+});
+
+// Your recent instructions show up as suggestions in the box.
+async function showRecentInstructions() {
+  const { recentInstructions = [] } = await chrome.storage.local.get("recentInstructions");
+  document.getElementById("recentInstructions").replaceChildren(
+    ...recentInstructions.map((text) => Object.assign(document.createElement("option"), { value: text })),
+  );
 }
 
 async function showSuggestionCount() {
@@ -23,9 +43,12 @@ async function showSuggestionCount() {
     "Rules and settings" + (n ? ` (${n} suggested rule${n === 1 ? "" : "s"})` : "");
 }
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes.ruleSuggestions) showSuggestionCount();
+  if (area !== "local") return;
+  if (changes.ruleSuggestions) showSuggestionCount();
+  if (changes.recentInstructions) showRecentInstructions();
 });
 showSuggestionCount();
+showRecentInstructions();
 
 const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);
 for (const key of ["autoGroup", "useClaudeForUnmatched"]) {

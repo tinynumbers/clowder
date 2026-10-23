@@ -12,12 +12,15 @@ import {
   planRuleAndDomainGroups,
   siteOf,
 } from "./grouping.js";
-import { clusterGroups, enforceClusters, findClusters, jiraProjects, linkedGroupId, parsePrUrl, prKey } from "./links.js";
+import { clusterGroups, enforceClusters, findClusters, jiraProjects, linkedGroupId, parsePrUrl, prKey, tabFacts } from "./links.js";
 
 const HOST = "com.clowder_tabs.host";
 const AUTO_DELAY_MS = 1500;
 const CLAUDE_AUTO_DELAY_MS = 8000;
 const GITHUB_CACHE_MS = 5 * 60 * 1000;
+// Bump when the lookup starts returning new fields, so old cache entries are ignored.
+const GITHUB_CACHE_PREFIX = "gh2:";
+const MAX_RECENT_INSTRUCTIONS = 8;
 
 async function getSettings() {
   return { ...DEFAULT_SETTINGS, ...(await chrome.storage.sync.get(DEFAULT_SETTINGS)) };
@@ -100,12 +103,12 @@ async function prDetails(tabs, settings) {
     if (pr) refs.set(prKey(pr), pr);
   }
   if (!refs.size) return { prMeta: {}, warning: "" };
-  const cacheKeys = [...refs.keys()].map((k) => "gh:" + k);
+  const cacheKeys = [...refs.keys()].map((k) => GITHUB_CACHE_PREFIX + k);
   const cached = await chrome.storage.session.get(cacheKeys);
   const prMeta = {};
   const missing = [];
   for (const [key, pr] of refs) {
-    const hit = cached["gh:" + key];
+    const hit = cached[GITHUB_CACHE_PREFIX + key];
     if (hit && Date.now() - hit.at < GITHUB_CACHE_MS) {
       if (hit.meta) prMeta[key] = hit.meta;
     } else missing.push(pr);
@@ -116,7 +119,7 @@ async function prDetails(tabs, settings) {
     const store = {};
     for (const pr of missing) {
       const meta = reply.prs[prKey(pr)] || null;
-      store["gh:" + prKey(pr)] = { at: Date.now(), meta };
+      store[GITHUB_CACHE_PREFIX + prKey(pr)] = { at: Date.now(), meta };
       if (meta) prMeta[prKey(pr)] = meta;
     }
     await chrome.storage.session.set(store);
@@ -128,14 +131,21 @@ async function prDetails(tabs, settings) {
   }
 }
 
+// Also returns what it learned (Jira projects, PR details), which Claude is
+// shown alongside each tab via forClaude().
 async function linkClusters(tabs, settings) {
   const { prMeta, warning } = await prDetails(tabs, settings);
-  const clusters = findClusters(tabs, {
-    projects: jiraProjects(tabs, settings.jiraProjects),
-    prMeta,
-    groupByMilestone: settings.groupByMilestone,
+  const projects = jiraProjects(tabs, settings.jiraProjects);
+  const clusters = findClusters(tabs, { projects, prMeta, groupByMilestone: settings.groupByMilestone });
+  return { clusters, warning, projects, prMeta };
+}
+
+// Tabs as Claude sees them: title and trimmed URL, plus any facts we know.
+function forClaude(tabs, { projects, prMeta }) {
+  return tabs.map((t) => {
+    const facts = tabFacts(t, { projects, prMeta });
+    return facts ? { ...describeTab(t), facts } : describeTab(t);
   });
-  return { clusters, warning };
 }
 
 const withWarning = (message, warning) => (warning ? `${message} ${warning}` : message);
@@ -170,14 +180,17 @@ async function storeSuggestions(suggestions, tabs, groups, rulesText) {
   return fresh.length;
 }
 
-// Returns Claude's groups, with each cluster of linked tabs held together
-// whatever Claude did, plus how many new rule suggestions it stored.
+// Returns Claude's groups, plus how many new rule suggestions it stored. Each
+// cluster of linked tabs is held together whatever Claude did, unless you've
+// given standing guidance or an instruction, which outrank links.
 async function askClaude(payload, clusters = []) {
   const settings = await getSettings();
+  const guidance = settings.guidance.trim();
   await chrome.action.setBadgeText({ text: "…" });
   try {
-    const reply = await callHost({ ...payload, linked: clusters, model: settings.model });
-    const groups = enforceClusters(reply.groups, clusters);
+    const reply = await callHost({ ...payload, guidance, linked: clusters, model: settings.model });
+    const enforce = payload.mode !== "instruct" && !guidance;
+    const groups = enforce ? enforceClusters(reply.groups, clusters) : reply.groups;
     const newRules = await storeSuggestions(reply.suggestedRules, payload.tabs, groups, settings.rules);
     return { groups, newRules };
   } finally {
@@ -195,11 +208,12 @@ async function organizeWithClaude(windowId) {
   const allWindows = settings.manualScope === "all";
   const tabs = await groupableTabs(windowId, allWindows);
   if (tabs.length < 2) return "Not enough tabs to organize.";
-  const { clusters, warning } = await linkClusters(tabs, settings);
+  const link = await linkClusters(tabs, settings);
+  const { clusters, warning } = link;
   const { groups, newRules } = await askClaude(
     {
       mode: "organize",
-      tabs: tabs.map(describeTab),
+      tabs: forClaude(tabs, link),
       existingGroups: await existingGroupNames(windowId, allWindows),
       rules: settings.rules,
     },
@@ -208,6 +222,46 @@ async function organizeWithClaude(windowId) {
   const n = await applyGroups(windowId, groups, allWindows);
   const suggested = newRules ? ` It also suggested ${newRules} new rule${newRules === 1 ? "" : "s"}: see Rules and settings.` : "";
   return withWarning(`Claude organized ${tabs.length} tabs${windowsNote(tabs)} into ${n} group${n === 1 ? "" : "s"}.${suggested}`, warning);
+}
+
+// Words that mean an instruction depends on what GitHub knows about a PR.
+const NEEDS_GITHUB = /\b(merged|closed|draft|milestones?|branch(es)?)\b/i;
+
+async function rememberInstruction(instruction) {
+  const { recentInstructions = [] } = await chrome.storage.local.get("recentInstructions");
+  const recent = [instruction, ...recentInstructions.filter((i) => i !== instruction)].slice(0, MAX_RECENT_INSTRUCTIONS);
+  await chrome.storage.local.set({ recentInstructions: recent });
+}
+
+// Groups just the tabs your instruction describes, like "put the merged PRs in
+// one group", and leaves every other tab where it is.
+async function groupWithInstruction(windowId, { instruction = "" } = {}) {
+  instruction = instruction.trim();
+  if (!instruction) throw new Error("Type an instruction first.");
+  const settings = await getSettings();
+  const allWindows = settings.manualScope === "all";
+  const tabs = await groupableTabs(windowId, allWindows);
+  const link = await linkClusters(tabs, settings);
+  const { groups } = await askClaude(
+    {
+      mode: "instruct",
+      instruction,
+      tabs: forClaude(tabs, link),
+      existingGroups: await existingGroupNames(windowId, allWindows),
+      rules: settings.rules,
+    },
+    link.clusters,
+  );
+  await rememberInstruction(instruction);
+  const hint =
+    !settings.githubLookups && NEEDS_GITHUB.test(instruction)
+      ? " Claude can't see PR status, milestones or branches unless \"Look up pull requests on GitHub\" is on in settings."
+      : "";
+  if (!groups.length) return withWarning(`Claude didn't find any tabs that fit.${hint}`, link.warning);
+  await applyGroups(windowId, groups, allWindows);
+  const moved = groups.reduce((n, g) => n + g.tabIds.length, 0);
+  const names = groups.map((g) => `"${g.name}"`).join(", ");
+  return withWarning(`Put ${moved} tab${moved === 1 ? "" : "s"} in ${names}.${hint}`, link.warning);
 }
 
 async function ungroupAll(windowId) {
@@ -363,7 +417,7 @@ async function assignWithClaude(windowId) {
   if (!tabs.length) return;
   const { groups } = await askClaude({
     mode: "assign",
-    tabs: tabs.map(describeTab),
+    tabs: forClaude(tabs, await linkClusters(tabs, settings)),
     existingGroups: await existingGroupNames(windowId),
     rules: settings.rules,
   });
@@ -385,7 +439,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 // ---- Popup and keyboard shortcuts ----
 
-const COMMANDS = { groupByRules, organizeWithClaude, ungroupAll, closeDuplicates };
+const COMMANDS = { groupByRules, organizeWithClaude, groupWithInstruction, ungroupAll, closeDuplicates };
 const SHORTCUTS = {
   "organize-with-claude": organizeWithClaude,
   "group-by-rules": groupByRules,
@@ -395,7 +449,7 @@ const SHORTCUTS = {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   const fn = COMMANDS[msg.cmd];
   if (!fn) return false;
-  fn(msg.windowId)
+  fn(msg.windowId, msg)
     .then((message) => sendResponse({ ok: true, message }))
     .catch((err) => sendResponse({ ok: false, message: err.message }));
   return true;

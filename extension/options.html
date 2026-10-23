@@ -6,6 +6,7 @@
   <style>
     body { font: 14px system-ui, sans-serif; max-width: 680px; margin: 32px auto; padding: 0 16px; color: #222; }
     textarea { width: 100%; height: 220px; font: 13px ui-monospace, monospace; box-sizing: border-box; }
+    textarea.prose { height: 90px; font: 13px system-ui, sans-serif; }
     label { display: block; margin: 14px 0 4px; font-weight: 600; }
     .hint { color: #666; font-size: 12px; margin: 4px 0; }
     input[type=number], input[type=text], select { font: inherit; padding: 3px; }
@@ -39,6 +40,14 @@
 atlassian.net = Jira, cyan
 /localhost:\d+/ = Local dev, green
 # comments are ignored"></textarea>
+
+  <label for="guidance">Standing instructions for Claude</label>
+  <p class="hint">Plain-language guidance sent with every Claude request, in your own words. It outranks
+    Clowder's own grouping choices, including keeping linked tabs together. For a one-off request, use the
+    box in the popup instead.</p>
+  <textarea id="guidance" class="prose" maxlength="1000" placeholder="Keep merged PRs in a group called Merged.
+Put everything for the decisiv-claude-tools repo together.
+Never group my email and calendar tabs."></textarea>
 
   <h2>Linked tabs</h2>
   <p class="hint">Tabs that mention the same Jira ticket (in the title, URL, or a PR's branch name) are kept

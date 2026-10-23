@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS = {
   jiraProjects: "",
   githubLookups: false,
   groupByMilestone: true,
+  guidance: "",
   minDomainGroupSize: 2,
   model: "haiku",
   rules: "",

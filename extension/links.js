@@ -89,6 +89,24 @@ export function linkKeys(tab, { projects, prMeta = {}, groupByMilestone = true }
   return keys;
 }
 
+// What Claude is told about a tab beyond its title and URL, so it can follow
+// instructions like "group the merged PRs" or "everything for PD-1234":
+// { tickets: [...], pr: { repo, state, milestone, branch } }, or null.
+export function tabFacts(tab, { projects, prMeta = {} }) {
+  const pr = parsePrUrl(tab.url);
+  const meta = pr && prMeta[prKey(pr)];
+  const tickets = ticketKeys(`${tab.title || ""} ${tab.url || ""} ${meta?.headRef || ""}`, projects);
+  const facts = {};
+  if (tickets.size) facts.tickets = [...tickets].slice(0, 10);
+  if (pr) {
+    facts.pr = { repo: `${pr.owner}/${pr.repo}` };
+    if (meta?.state) facts.pr.state = meta.state;
+    if (meta?.milestone) facts.pr.milestone = meta.milestone;
+    if (meta?.headRef) facts.pr.branch = meta.headRef;
+  }
+  return Object.keys(facts).length ? facts : null;
+}
+
 // A short group name for a cluster: its milestone, else its ticket keys, else its PR.
 function labelFor(keys, milestones) {
   const ms = [...keys].find((k) => k.startsWith("ms:"));

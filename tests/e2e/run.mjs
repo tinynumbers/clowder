@@ -30,7 +30,13 @@ const RAILS = "https://github.com/rails/rails/issues/4";
 const GUIDE = "https://guides.rubyonrails.org/active_record_callbacks.html";
 const BREAD1 = "https://www.seriouseats.com/sourdough";
 const BREAD2 = "https://www.kingarthurbaking.com/recipes/focaccia";
+const PR3 = "https://github.com/Decisiv/pricing/pull/21287";
+const PR4 = "https://github.com/Decisiv/pricing/pull/21288";
+const TOOLS_REPO = "https://github.com/Decisiv/decisiv-claude-tools";
+const TOOLS_PR = "https://github.com/Decisiv/decisiv-claude-tools/pull/42";
+const TOOLS_CI = "https://app.circleci.com/pipelines/github/Decisiv/decisiv-claude-tools/310";
 let CI; // a CircleCI tab for PR1's real latest workflow, found at startup
+const STATE = {}; // PR url -> OPEN, MERGED or CLOSED, read from GitHub at startup
 
 const BASE_SETTINGS = {
   autoGroup: false,
@@ -41,6 +47,7 @@ const BASE_SETTINGS = {
   groupByMilestone: true,
   jiraProjects: "",
   rules: "",
+  guidance: "",
 };
 
 let ctl; // an extension page, so chrome.* APIs can be called from the test
@@ -96,12 +103,45 @@ const together = (tabs, urls) => {
 };
 const describe = (tabs, urls) => urls.map((u) => `${u.split("/").slice(-2).join("/")} in ${JSON.stringify(groupOf(tabs, u))}`).join("; ");
 
-const run = (cmd, windowId) => x(([cmd, windowId]) => chrome.runtime.sendMessage({ cmd, windowId }), [cmd, windowId]);
+const run = (cmd, windowId, extra = {}) =>
+  x(([cmd, windowId, extra]) => chrome.runtime.sendMessage({ cmd, windowId, ...extra }), [cmd, windowId, extra]);
+
+// Puts tabs into a named group directly, standing in for groups you made yourself.
+// The group is made in the tabs' own window; chrome.tabs.group would otherwise
+// use the test's control window and move the tabs there.
+async function makeGroup(urls, title) {
+  const tabs = await layout();
+  const ids = urls.map((u) => tabFor(tabs, u).id);
+  const windowId = tabFor(tabs, urls[0]).windowId;
+  await x(
+    async ([ids, title, windowId]) =>
+      chrome.tabGroups.update(await chrome.tabs.group({ tabIds: ids, createProperties: { windowId } }), { title }),
+    [ids, title, windowId],
+  );
+}
+
+function showWindow(tabs, win) {
+  for (const t of tabs.filter((t) => t.windowId === win)) console.log(`      ${t.group ?? "(none)"}: ${t.url}`);
+}
 
 let windows = [];
+// Closes every window but the test's own, and waits until their tabs are gone.
 async function reset(settings = {}) {
-  for (const id of windows) await x((id) => chrome.windows.remove(id).catch(() => {}), id);
   windows = [];
+  const leftovers = await x(async () => {
+    const own = (await chrome.windows.getCurrent()).id;
+    const self = (await chrome.tabs.getCurrent()).id;
+    for (const w of await chrome.windows.getAll()) if (w.id !== own) await chrome.windows.remove(w.id).catch(() => {});
+    const strays = (await chrome.tabs.query({ windowId: own })).filter((t) => t.id !== self).map((t) => t.id);
+    if (strays.length) await chrome.tabs.remove(strays);
+    for (let i = 0; i < 40; i++) {
+      const extra = (await chrome.tabs.query({})).filter((t) => t.windowId !== own);
+      if (!extra.length) return [];
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return (await chrome.tabs.query({})).filter((t) => t.windowId !== own).map((t) => t.url);
+  });
+  if (leftovers.length) throw new Error(`windows from the last scenario didn't close: ${leftovers}`);
   await x(async (s) => {
     await chrome.storage.sync.set(s);
     await chrome.storage.local.clear();
@@ -187,6 +227,77 @@ const SCENARIOS = {
     check("unrelated GitHub tab doesn't join the ticket's group", groupOf(tabs, RAILS) !== groupOf(tabs, PR1), describe(tabs, [RAILS, PR1]));
   },
 
+  async "instruction: put merged PRs in one group, leave everything else alone"() {
+    await reset({ githubLookups: true });
+    const prs = [PR1, PR2, PR3, PR4];
+    const win = await openWindow([...prs, J1, BREAD1, BREAD2]);
+    windows.push(win);
+    await makeGroup([BREAD1, BREAD2], "Baking");
+    const reply = await run("groupWithInstruction", win, { instruction: "Put all the GitHub PRs that have already been merged into one group called Merged" });
+    const tabs = await layout();
+    console.log(`    ${reply.message}`);
+    showWindow(tabs, win);
+    const merged = prs.filter((u) => STATE[u] === "MERGED");
+    const notMerged = prs.filter((u) => STATE[u] !== "MERGED");
+    console.log(`    GitHub says merged: ${merged.map((u) => u.split("/").pop())}; not merged: ${notMerged.map((u) => u.split("/").pop())}`);
+    check("action succeeded", reply.ok, reply.message);
+    check("merged PRs share a group called Merged", together(tabs, merged) && /merged/i.test(groupOf(tabs, merged[0]) || ""), describe(tabs, merged));
+    check("open PRs aren't in it", notMerged.every((u) => tabFor(tabs, u).groupId !== tabFor(tabs, merged[0]).groupId), describe(tabs, notMerged));
+    check("the ticket isn't in it", tabFor(tabs, J1).groupId !== tabFor(tabs, merged[0]).groupId, describe(tabs, [J1]));
+    check("your existing group is untouched", together(tabs, [BREAD1, BREAD2]) && groupOf(tabs, BREAD1) === "Baking", describe(tabs, [BREAD1, BREAD2]));
+  },
+
+  async "instruction: group everything for one ticket"() {
+    await reset({ githubLookups: true });
+    const win = await openWindow([J1, PR1, CI, J2, PR2, BREAD1]);
+    windows.push(win);
+    const reply = await run("groupWithInstruction", win, { instruction: "Group together all the tabs related to Jira ticket PD-5872" });
+    const tabs = await layout();
+    console.log(`    ${reply.message}`);
+    check("action succeeded", reply.ok, reply.message);
+    check("ticket, its PR and CI run share a group", together(tabs, [J1, PR1, CI]), describe(tabs, [J1, PR1, CI]));
+    check("the other ticket's tabs aren't in it", [J2, PR2].every((u) => tabFor(tabs, u).groupId !== tabFor(tabs, J1).groupId), describe(tabs, [J2, PR2]));
+    check("tabs the instruction didn't cover stay ungrouped", [J2, PR2, BREAD1].every((u) => groupOf(tabs, u) === null), describe(tabs, [J2, PR2, BREAD1]));
+  },
+
+  async "instruction: group everything for one repo"() {
+    await reset();
+    const win = await openWindow([TOOLS_REPO, TOOLS_PR, TOOLS_CI, PR1, J2, BREAD1]);
+    windows.push(win);
+    const reply = await run("groupWithInstruction", win, { instruction: "Group together all the tabs related to the decisiv-claude-tools repo" });
+    const tabs = await layout();
+    console.log(`    ${reply.message}`);
+    check("action succeeded", reply.ok, reply.message);
+    check("repo page, PR and CircleCI pipeline share a group", together(tabs, [TOOLS_REPO, TOOLS_PR, TOOLS_CI]), describe(tabs, [TOOLS_REPO, TOOLS_PR, TOOLS_CI]));
+    check("other repos' tabs stay out", [PR1, J2, BREAD1].every((u) => groupOf(tabs, u) === null), describe(tabs, [PR1, J2, BREAD1]));
+  },
+
+  async "instruction about PR status without GitHub lookups explains why"() {
+    await reset();
+    const win = await openWindow([PR1, PR3]);
+    windows.push(win);
+    const reply = await run("groupWithInstruction", win, { instruction: "Group the merged PRs" });
+    check("reply points to the GitHub lookup setting", reply.ok && /Look up pull requests on GitHub/.test(reply.message), reply.message);
+    const { recentInstructions } = await x(() => chrome.storage.local.get("recentInstructions"));
+    check("the instruction is saved for reuse", recentInstructions?.[0] === "Group the merged PRs", JSON.stringify(recentInstructions));
+  },
+
+  async "standing instructions outrank linked tabs"() {
+    await reset({ githubLookups: true, guidance: "Always put merged pull requests in their own group called Merged, apart from their Jira tickets." });
+    const win = await openWindow([J1, PR1, PR3, J3, BREAD1, BREAD2]);
+    windows.push(win);
+    const reply = await run("organizeWithClaude", win);
+    const tabs = await layout();
+    console.log(`    ${reply.message}`);
+    showWindow(tabs, win);
+    check("action succeeded", reply.ok, reply.message);
+    if (STATE[PR1] === "MERGED") {
+      check("the merged PR is in Merged", /merged/i.test(groupOf(tabs, PR1) || ""), describe(tabs, [PR1]));
+      check("its ticket was split off, as instructed", tabFor(tabs, J1).groupId !== tabFor(tabs, PR1).groupId, describe(tabs, [J1, PR1]));
+    }
+    if (STATE[PR3] !== "MERGED") check("the open PR isn't in Merged", !/merged/i.test(groupOf(tabs, PR3) || ""), describe(tabs, [PR3]));
+  },
+
   async "close duplicates keeps the most recently loaded copy"() {
     await reset();
     const win = await openWindow([BREAD1, BREAD1, BREAD2]);
@@ -234,7 +345,7 @@ const SCENARIOS = {
     const page = await ctl.browser().newPage();
     await page.goto(`chrome-extension://${ID}/options.html`);
     await page.waitForSelector("#suggestions:not([hidden]) .suggestion");
-    const fields = await page.evaluate(() => ["jiraProjects", "githubLookups", "groupByMilestone", "manualScope"].filter((id) => !document.getElementById(id)));
+    const fields = await page.evaluate(() => ["jiraProjects", "githubLookups", "groupByMilestone", "manualScope", "guidance"].filter((id) => !document.getElementById(id)));
     check("new settings fields are on the page", fields.length === 0, `missing ${fields}`);
     check("suggestion is listed", (await page.$eval(".suggestion code", (c) => c.textContent)) === "/localhost:\\d+/ = Local Dev, green");
     await page.click(".suggestion button");
@@ -274,7 +385,11 @@ async function main() {
     await ctl.goto(`chrome-extension://${ID}/popup.html`);
     for (const p of await browser.pages()) if (p !== ctl) await p.close();
 
-    const lookup = await x((host) => chrome.runtime.sendNativeMessage(host, { mode: "github", prs: [{ owner: "Decisiv", repo: "pricing", number: 21248 }] }), HOST);
+    const numbers = [21248, 21247, 21287, 21288];
+    const prs = numbers.map((number) => ({ owner: "Decisiv", repo: "pricing", number }));
+    const lookup = await x(([host, prs]) => chrome.runtime.sendNativeMessage(host, { mode: "github", prs }), [HOST, prs]);
+    for (const n of numbers) STATE[`https://github.com/Decisiv/pricing/pull/${n}`] = lookup.prs?.[`decisiv/pricing#${n}`]?.state;
+    STATE[PR2] = STATE["https://github.com/Decisiv/pricing/pull/21247"];
     const wf = lookup.prs?.["decisiv/pricing#21248"]?.ciUrls?.map((u) => u.match(/workflow\/([0-9a-f-]{36})/)?.[1]).find(Boolean);
     if (!wf) throw new Error(`Couldn't look up PR 21248's CircleCI workflow: ${JSON.stringify(lookup)}`);
     CI = `https://app.circleci.com/pipelines/github/Decisiv/pricing/1/workflows/${wf}/jobs/1`;

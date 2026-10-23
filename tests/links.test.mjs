@@ -8,6 +8,7 @@ import {
   jiraProjects,
   linkedGroupId,
   linkKeys,
+  tabFacts,
   parsePrUrl,
   ticketKeys,
 } from "../extension/links.js";
@@ -138,4 +139,14 @@ test("clusterGroups keeps an existing group's name, else uses the label", () => 
     { name: "Pricing Fix", tabIds: [1, 2] },
     { name: "PD-2", tabIds: [3, 4] },
   ]);
+});
+
+test("tabFacts reports ticket keys and what GitHub said about a PR", () => {
+  const meta = { "acme/pricing#88": { state: "MERGED", milestone: "8.40", headRef: "pd-7-fix", ciUrls: [] } };
+  assert.deepEqual(tabFacts({ title: "[PD-1] Fix · Pull Request #88", url: "https://github.com/acme/pricing/pull/88" }, { projects, prMeta: meta }), {
+    tickets: ["PD-1", "PD-7"],
+    pr: { repo: "acme/pricing", state: "MERGED", milestone: "8.40", branch: "pd-7-fix" },
+  });
+  assert.deepEqual(tabFacts({ title: "Some PR", url: "https://github.com/acme/app/pull/3" }, { projects }), { pr: { repo: "acme/app" } });
+  assert.equal(tabFacts({ title: "Sourdough", url: "https://example.com/" }, { projects }), null);
 });

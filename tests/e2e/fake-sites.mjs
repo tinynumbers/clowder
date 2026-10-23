@@ -27,6 +27,13 @@ const TITLES = {
   // No ticket key in this title: only the PR's branch name links it to PD-5767.
   "github.com/Decisiv/pricing/pull/21247/files":
     "Migrate service_management base controller · Pull Request #21247 · Decisiv/pricing",
+  "github.com/Decisiv/pricing/pull/21287":
+    "[PD-5951] Remove configured_integration_id from diagnostic qualification identity by dwd · Pull Request #21287 · Decisiv/pricing",
+  "github.com/Decisiv/pricing/pull/21288":
+    "[PD-5725] Show the same notes in the Case Notes tooltip as in the Notes section · Pull Request #21288 · Decisiv/pricing",
+  "github.com/Decisiv/decisiv-claude-tools": "Decisiv/decisiv-claude-tools: Shared Claude Code skills and plugins",
+  "github.com/Decisiv/decisiv-claude-tools/pull/42": "Add a worklog skill · Pull Request #42 · Decisiv/decisiv-claude-tools",
+  "app.circleci.com/pipelines/github/Decisiv/decisiv-claude-tools/310": "decisiv-claude-tools - CircleCI",
   "github.com/rails/rails/issues/4": "Fix UTF-8 handling in SHA-256 digests · Issue #4 · rails/rails",
   "www.seriouseats.com/sourdough": "Best sourdough recipe",
   "www.kingarthurbaking.com/recipes/focaccia": "Focaccia guide",
